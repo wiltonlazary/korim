@@ -1,19 +1,19 @@
 package com.soywiz.korim.format
 
-import com.soywiz.korim.bitmap.Bitmap
 import com.soywiz.korim.bitmap.Bitmap32
 import com.soywiz.korim.bitmap.Bitmap8
+import com.soywiz.korim.color.RGB
 import com.soywiz.korim.color.RGBA
 import com.soywiz.korio.stream.*
 
-object TGA : ImageFormat() {
-	override fun decodeHeader(s: SyncStream): ImageInfo? {
+class TGA : ImageFormat("tga") {
+	override fun decodeHeader(s: SyncStream, filename: String): ImageInfo? {
 		try {
 			val h = readHeader(s)
 			return ImageInfo().apply {
 				this.width = h.width
 				this.height = h.height
-				this.bitsPerPixel = h.pixelDepth
+				this.bitsPerPixel = h.bitsPerPixel
 			}
 		} catch (t: Throwable) {
 			return null
@@ -24,8 +24,11 @@ object TGA : ImageFormat() {
 		val width: Int,
 		val height: Int,
 		val flipY: Boolean,
-	    val pixelDepth: Int
-	)
+		val bitsPerPixel: Int
+	) {
+		val area = width * height
+		val bytes = bitsPerPixel / 8
+	}
 
 	// http://www.paulbourke.net/dataformats/tga/
 	fun readHeader(s: SyncStream): Info {
@@ -55,18 +58,23 @@ object TGA : ImageFormat() {
 		val flipY = ((imageDescriptor ushr 5) and 1) == 0
 		val storage = ((imageDescriptor ushr 6) and 3)
 		s.readBytes(idLength)
-		return Info(width = width, height = height, flipY = flipY, pixelDepth = pixelDepth)
+		return Info(width = width, height = height, flipY = flipY, bitsPerPixel = pixelDepth)
 	}
 
-	override fun read(s: SyncStream): Bitmap {
+	override fun readFrames(s: SyncStream, filename: String): List<ImageFrame> {
 		val info = readHeader(s)
-		val out = Bitmap32(info.width, info.height)
-		for (n in 0 until out.area) out.data[n] = s.readS32_le()
+		val format = when (info.bitsPerPixel) {
+			24 -> RGB
+			32 -> RGBA
+			else -> TODO("Not a RGBA tga")
+		}
+		val out = Bitmap32(info.width, info.height).writeDecoded(format, s.readBytes(info.area * info.bytes))
 		if (info.flipY) out.flipY()
-		return out
+		return listOf(ImageFrame(out))
 	}
 
-	override fun write(bitmap: Bitmap, s: SyncStream) {
+	override fun writeFrames(frames: List<ImageFrame>, s: SyncStream, filename: String) {
+		val bitmap = frames.first().bitmap
 		when (bitmap) {
 			is Bitmap8 -> {
 				TODO("Not implemented encoding TGA Bitmap8")

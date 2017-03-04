@@ -1,8 +1,14 @@
 package com.soywiz.korim.bitmap
 
+import com.soywiz.korim.vector.Context2d
 import com.soywiz.korio.util.clamp
 
-open class Bitmap(val width: Int, val height: Int) {
+abstract class Bitmap(
+	val width: Int,
+	val height: Int,
+	val bpp: Int
+) {
+	val stride: Int get() = (width * bpp) / 8
 	val area: Int get() = width * height
 	fun index(x: Int, y: Int) = y * width + x
 
@@ -16,14 +22,21 @@ open class Bitmap(val width: Int, val height: Int) {
 	fun clampX(x: Int) = x.clamp(0, width - 1)
 	fun clampY(y: Int) = y.clamp(0, height - 1)
 
+	fun flipY() = this.apply {
+		for (y in 0 until height / 2) swapRows(y, height - y - 1)
+	}
+
+	abstract fun swapRows(y0: Int, y1: Int)
+
+	open fun getContext2d(): Context2d = throw UnsupportedOperationException("Not implemented context2d on Bitmap, please use NativeImage instead")
+
 	fun toBMP32(): Bitmap32 = when (this) {
 		is Bitmap32 -> this
-		is Bitmap8 -> {
+		is NativeImage -> this.toBmp32()
+		else -> {
 			val out = Bitmap32(width, height)
 			for (y in 0 until height) for (x in 0 until width) out[x, y] = this.get32(x, y)
 			out
 		}
-		is NativeImage -> this.toBmp32()
-		else -> throw IllegalArgumentException("Invalid Bitmap")
 	}
 }
